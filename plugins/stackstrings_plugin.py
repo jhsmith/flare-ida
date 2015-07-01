@@ -37,7 +37,7 @@ class stackstrings_plugin_t(idaapi.plugin_t):
 
     help = "This is help"
     wanted_name = "StackStrings"
-    wanted_hotkey = "Alt-0"
+    wanted_hotkey = ""
 
     def init(self):
         try:

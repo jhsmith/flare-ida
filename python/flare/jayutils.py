@@ -79,7 +79,27 @@ def makeNameHard(ea, name):
             ret = idc.MakeNameEx(ea, newName, idc.SN_PUBLIC|idc.SN_NOWARN)
             count += 1
  
-
+def getx86CodeSize(ea=None):
+    '''
+    For a given EA, finds the code size. Returns 16 for-16bit, 32 for 32-bit, or 64 for 64-bit.
+    If no EA is given, searches through all segments for a code segment to use.
+    '''
+    if ea is None:
+        for seg in idautils.Segments():
+            if idc.GetSegmentAttr(seg, idc.SEGATTR_TYPE) == idc.SEG_CODE:
+                ea = seg
+                break
+    if ea is None:
+        raise RuntimeError('Could not find code segment to use for getx86CodeSize')
+    bitness = idc.GetSegmentAttr(ea, idc.SEGATTR_BITNESS)
+    if bitness == 0:
+        return 16
+    elif bitness == 1:
+        return 32
+    elif bitness == 2:
+        return 64
+    raise RuntimeError('Bad bitness')
+ 
 ###############################################################################
 # Config loggers and add hex dumps to the logger
 ###############################################################################
@@ -189,6 +209,7 @@ def getInputFilepath():
         print 'IDB input file not found. Prompting for new one: %s' % filePath
         filePath = idc.AskFile(False, '*.*', 'Enter path to idb input file')
         if filePath is not None:
+            print 'Using new input file: %s' % filePath
             idc.SetInputFilePath(filePath)
     return filePath
 
