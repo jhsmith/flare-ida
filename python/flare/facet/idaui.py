@@ -26,6 +26,8 @@ class ClassGuiWidget(QtGui.QWidget):
             self.objStuff.updateStateFromDisplay()
             self.setFields()
             self.updateFields()
+            self.installEventFilter(self)
+            self.ui.line_className.installEventFilter(self)
 
             self.ui.combo_objPtrReg.setCurrentIndex(self.objStuff.selectedRegIdx)
             self.setFocusPolicy(QtCore.Qt.StrongFocus)
@@ -105,6 +107,16 @@ class ClassGuiWidget(QtGui.QWidget):
                 self.ui.line_delta.setText('0x%02x' % self.objStuff.pointerDelta)
         else:
             self.objStuff.pointerDelta = 0
+
+    def eventFilter(self, widget, event):
+        if ((event.type() == QtCore.QEvent.KeyPress) and (event.key() == QtCore.Qt.Key_Enter)):
+            #(widget == self.ui.line_funcStart) or (widget == self.ui.line_startLocation) or 
+            #(widget == self.ui.line_className) or
+            #(widget == self.ui.line_objectSize))):
+                self.logg.debug('Caught an enter on a line edit. Accepting')
+                self.accepted.emit()  
+                return True
+        return False
 
     def onFilterUserClassClicked(self):
         try:

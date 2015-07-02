@@ -36,8 +36,9 @@ from PySide import QtCore, QtGui
 
 import flare.jayutils as jayutils
 
-from . import analysis
 from . import idaui
+from . import analysis
+from . import vfunc_markup
 
 class RejectionException(Exception):
     pass
@@ -46,11 +47,18 @@ class Launcher(object):
     def __init__(self):
         self.logger = jayutils.getLogger('facet.Launcher')
 
-    def runStuff(self, doDialog=False):
+    def runMarkupFunction(self, doDialog=False):
         if doDialog:
             self.runDialog()
         else:
             self.runForm()
+
+    def runMarkupVtable(self, doDialog=False):
+        runner = vfunc_markup.VfuncMarkupRunner()
+        runner.run()
+
+    def runBrowseClasses(self, doDialog=False):
+        self.logger.info('runBrowseClasses: Not yet implemented')
 
     def runDialog(self):
         try:
@@ -90,11 +98,19 @@ class Launcher(object):
 
 ################################################################################
 
-def run(doDialog=False):
+def runMarkupFunction(doDialog=False):
     launcher =  Launcher()
-    launcher.runStuff(doDialog)
+    launcher.runMarkupFunction(doDialog)
 
-if __name__ == '__main__':
-    logger = jayutils.configLogger('', logging.DEBUG)
-    #runStuff(True)
-    runStuff(False)
+def runMarkupVtable(doDialog=False):
+    launcher =  Launcher()
+    launcher.runMarkupVtable(doDialog)
+
+def runBrowseClasses(doDialog=False):
+    launcher =  Launcher()
+    launcher.runBrowseClasses(doDialog)
+
+#if __name__ == '__main__':
+#    logger = jayutils.configLogger('', logging.DEBUG)
+#    #runStuff(True)
+#    runStuff(False)
