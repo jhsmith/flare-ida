@@ -40,6 +40,8 @@ from . import idaui
 from . import analysis
 from . import vfunc_markup
 
+################################################################################
+
 class RejectionException(Exception):
     pass
 ################################################################################
@@ -47,35 +49,33 @@ class Launcher(object):
     def __init__(self):
         self.logger = jayutils.getLogger('facet.Launcher')
 
-    def runMarkupFunction(self, doDialog=False):
-        if doDialog:
-            self.runDialog()
-        else:
-            self.runForm()
+    #def runMarkupFunction(self):
+    #    self.runDialog('new')
 
-    def runMarkupVtable(self, doDialog=False):
-        runner = vfunc_markup.VfuncMarkupRunner()
-        runner.run()
+    #def runMarkupVtable(self):
+    #    #runner = vfunc_markup.VfuncMarkupRunner()
+    #    #runner.run()
 
-    def runBrowseClasses(self, doDialog=False):
-        self.logger.info('runBrowseClasses: Not yet implemented')
+    #def runBrowseClasses(self):
+    #    self.logger.info('runBrowseClasses: Not yet implemented')
 
-    def runDialog(self):
+    def runDialog(self, tabName):
         try:
-            self.logger.debug('Trying to run dialog now')
+            self.logger.debug('Trying to run %s dialog now', tabName)
             filePath = jayutils.getInputFilepath()
             if filePath is None:
                 self.logger.info('No input file provided. Stopping')
                 return
             vw = jayutils.loadWorkspace(filePath)
             objStuff = analysis.FacetObjectAnalyzer(vw)
-            dlg = idaui.ClassInfoDialog(objStuff)
+            dlg = idaui.FacetMainDialog(objStuff)
+            dlg.setActiveTab(tabName)
             oldTo = idaapi.set_script_timeout(0)
             res = dlg.exec_()
             idaapi.set_script_timeout(oldTo)
             if res == QtGui.QDialog.DialogCode.Accepted:
                 self.logger.debug('Dialog result: accepted')
-                objStuff.runFunction()
+                objStuff.runAnalysis()
             elif res == QtGui.QDialog.DialogCode.Rejected:
                 self.logger.debug('Dialog result: rejected')
                 raise RejectionException()
@@ -88,27 +88,35 @@ class Launcher(object):
             self.logger.exception('Error in runDialog: %s', str(err))
 
     def runForm(self):
-        try:
-            #run as an IDA form
-            plg = MyPluginFormClass()
-            plg.Show("ClassStuff")
-        except Exception, err:
-            self.logger.exception('Error in runForm: %s', str(err))
+        raise RuntimeError('runForm not supported')
+        #try:
+        #    #run as an IDA form
+        #    plg = MyPluginFormClass()
+        #    plg.Show("ClassStuff")
+        #except Exception, err:
+        #    self.logger.exception('Error in runForm: %s', str(err))
 
 
 ################################################################################
-
-def runMarkupFunction(doDialog=False):
+def runCreateStruct():
     launcher =  Launcher()
-    launcher.runMarkupFunction(doDialog)
+    launcher.runDialog('new')
 
-def runMarkupVtable(doDialog=False):
+def runMarkupExistingStruct():
     launcher =  Launcher()
-    launcher.runMarkupVtable(doDialog)
+    launcher.runDialog('existing')
 
-def runBrowseClasses(doDialog=False):
+def runMarkupVtable():
     launcher =  Launcher()
-    launcher.runBrowseClasses(doDialog)
+    launcher.runDialog('vfunc')
+
+def runBrowseClasses():
+    launcher =  Launcher()
+    launcher.runDialog('relations')
+
+def runBrowseHelp():
+    launcher =  Launcher()
+    launcher.runDialog('help')
 
 #if __name__ == '__main__':
 #    logger = jayutils.configLogger('', logging.DEBUG)

@@ -21,7 +21,7 @@ with warnings.catch_warnings():
     from visgraph import pathcore as vg_path
     import vivisect.impemu.monitor as viv_imp_monitor
 
-USER_STRUCT_INFO = 'facet_user_structs'
+FACET_USER_STRUCTS_NODE = 'facet_user_structs'
 
 #maps # of bits to a tuple of (IDA_TYPE, NUMBER_BYTES)
 IDA_DATA_SIZES = {
@@ -316,29 +316,36 @@ class FacetObjectAnalyzer(object):
         self.codesizeBytes = self.codesize/8
         if self.codesize == 32:
             self.registers = X86_REGISTERS
-            self.defRegisterIdx = self.registers.index('ecx')
+            #self.defRegisterIdx = self.registers.index('ecx')
+            self.defRegister = 'ecx'
         elif self.codesize == 64:
             self.registers = X64_REGISTERS
-            self.defRegisterIdx = self.registers.index('rcx')
+            #self.defRegisterIdx = self.registers.index('rcx')
+            self.defRegister = 'rcx'
         else:
             raise RuntimeError('Only x86 32-bit or x64 64-bit supported')
-        self.selectedRegIdx = self.defRegisterIdx
-        self.filterUserClass = True
+        self.action = None
+        #self.selectedRegIdx = self.defRegisterIdx
+        self.selectedReg = self.defRegister
+        self.filterFacetClass = True
         self.createVtable = True
         self.modifyExisting = False 
         self.pointerDelta = 0
-        self.funcStart = 0
-        self.currentAddress = 0
+        self.funcStart = None
+        self.currentAddress = None
         self.structSize = 0
         self.useExisting = False
         self.useFunctionStart = False
         self.useCurrentAddress = False
-        self.createNew = False
+        #self.createNew = False
         self.useRegisterPointer = True
         self.existingStructName = None
         self.newStructName = None
         self.defaultNewStructName = ''
+        self.newStructParentName = None
+        self.associateFunctionWithClass = True
         self.userStructs = []
+        self.validParents = []
         self.existingStructInfo = []
         self.existingStructNames = []
         self.loadUserStructs()
@@ -384,7 +391,65 @@ class FacetObjectAnalyzer(object):
     def getObjOffset(self, va):
         return (va - self.obj_pointer)
 
-    def runFunction(self):
+    def runAnalysis(self):
+        if self.action == 'new':
+            self.runActionNew()
+        elif self.action == 'existing':
+            self.runActionExisting()
+        elif self.action == 'vfunc':
+            self.runActionVfunc()
+        elif self.action == 'relations':
+            self.runActionRelations()
+        elif self.action == 'help':
+            self.runActionHelp()
+        else:
+            raise RuntimeError('Action analysis not implmented: %s' % action)
+
+    def runActionNew(self):
+        self.dumpRunAnalysisConfig()
+        return
+        tracker = self.emulateFunction()
+        #reload struct after creation
+        self.loadUserStructs()
+        self.loadStructInfo()
+        self.markupStructUse(self.newStructName, tracker)
+
+    def runActionExisting(self):
+        self.dumpRunAnalysisConfig()
+        return
+        self.markupStructUse(self.existingStructName, tracker)
+
+    def runActionVfunc(self):
+        self.logger.info('runActionVfunc: TODO!')
+
+    def runActionRelations(self):
+        self.logger.info('runActionRelations: nothing to do')
+
+    def runActionHelp(self):
+        self.logger.info('runActionHelp: nothing to do')
+
+    def dumpRunAnalysisConfig(self):
+        if self.useCurrentAddress:
+            self.logger.info('Start address 0x%08x (explicit)', self.currentAddress)
+        else:
+            self.logger.info('Start address 0x%08x (function start)', self.funcStart)
+        if self.action == 'new':
+            self.logger.info('Class name: %s', self.newStructName)
+            self.logger.info('Class size: 0x%x', self.structSize)
+        else:
+            self.logger.info('Class name: %s', self.existingStructName)
+        self.logger.info('Parent class: %r', self.newStructParentName)
+        self.logger.info('Object register: %s', self.selectedReg)
+        self.logger.info('Pointer delta: 0x%x', self.pointerDelta)
+
+        if self.action != 'new':
+            self.logger.info('Modify existing: %r', self.modifyExisting)
+            self.logger.info('Associate function with class: %r', self.associateFunctionWithClass)
+
+    def emulateFunction(self):
+        '''
+        Returns an ObjectTracker for the function
+        '''
         emu = self.initEmu()
         #orange TODO: it would be better to run from the start of the function regardless,
         # and just take results starting at 
@@ -415,15 +480,7 @@ class FacetObjectAnalyzer(object):
                 if i != 0:
                     pad = '    '
                 self.logger.debug('%s0x%04x: 0x%08x %d 0x%x', pad, offset, eip, opIdx, delta)
-
-        if self.createNew:
-            self.createStruct(self.newStructName, tracker)
-            #reload struct after creation
-            self.loadUserStructs()
-            self.loadStructInfo()
-            self.markupStructUse(self.newStructName, tracker)
-        else:
-            self.markupStructUse(self.existingStructName, tracker)
+        return tracker
 
     def updateStateFromDisplay(self):
         #grab 'transient' state, for use during focus-in events
@@ -435,7 +492,7 @@ class FacetObjectAnalyzer(object):
         #store user structs as a ';' delimited string
         # actual struct info will/should be loaded along with other structs
         # in loadStructInfo
-        curr = jayutils.queryIdbNetnode(USER_STRUCT_INFO)
+        curr = jayutils.queryIdbNetnode(FACET_USER_STRUCTS_NODE)
         if curr is None:
             self.logger.debug('No user structs found')
             self.defaultNewStructName = 'cls1'
@@ -453,7 +510,7 @@ class FacetObjectAnalyzer(object):
             #check if a user deleted a struct: update the built-in list
             if len(loadedStructs) != len(self.userStructs):
                 cur = ';'.join(self.userStructs)
-                jayutils.setIdbNetnode(USER_STRUCT_INFO, curr)
+                jayutils.setIdbNetnode(FACET_USER_STRUCTS_NODE, curr)
             i = 1
             nextName = 'cls%d' % i
             while any([name.startswith(nextName) for name in self.userStructs]):
@@ -464,13 +521,13 @@ class FacetObjectAnalyzer(object):
             self.defaultNewStructName = nextName
 
     def addUserStruct(self, name):
-        curr = jayutils.queryIdbNetnode(USER_STRUCT_INFO)
+        curr = jayutils.queryIdbNetnode(FACET_USER_STRUCTS_NODE)
         if curr is None:
             curr = name
         else:
             curr = curr + ';' + name
         self.logger.debug('new user structs: %s', curr)
-        jayutils.setIdbNetnode(USER_STRUCT_INFO, curr)
+        jayutils.setIdbNetnode(FACET_USER_STRUCTS_NODE, curr)
 
     def loadStructInfo(self):
         idx = idaapi.get_first_struc_idx()
