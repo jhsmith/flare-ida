@@ -23,6 +23,9 @@ INV_TAB_MAP = {}
 for k,v in TAB_MAP.items():
     INV_TAB_MAP[v] = k
 
+g_vfuncChooseCols = [ ('StructId', 80), ('Struct', 100), ('Member', 100), ('Address', 80), ('Name', 100) ]
+g_containsCols = [ ('StructId', 80), ('Offset', 80), ('Name', 100) ]
+g_relationsChildrenCols = [ ('StructId', 80), ('Name', 100) ]
 ################################################################################
 g_HelpHtml = '''
 <html>
@@ -58,6 +61,7 @@ class FacetUiWidget(QtGui.QWidget):
             self.ui.buttonBox.accepted.connect(self.onAccepted)
             self.ui.buttonBox.rejected.connect(self.onRejected)
             self.ui.existing_cbFilterFacetClasses.stateChanged.connect(self.onFilterFacetStructsChanged)
+            self.ui.relations_nameComboBox.activated.connect(self.onRelationsNameActivated)
 
         except Exception, err:
             self.logger.exception('Error during init: %s', str(err))
@@ -70,14 +74,15 @@ class FacetUiWidget(QtGui.QWidget):
         self.ui.new_pointerDeltaLineEdit.setText('0x%02x' % self.objStuff.pointerDelta)
         self.ui.existing_pointerDeltaLineEdit.setText('0x%02x' % self.objStuff.pointerDelta)
 
-        self.ui.existing_nameComboBox.clear()
-        self.ui.existing_nameComboBox.addItems(self.objStuff.existingStructNames)
+        #self.ui.existing_nameComboBox.clear()
+        #self.ui.existing_nameComboBox.addItems(self.objStuff.existingStructNames)
+        self.onFilterFacetStructsChanged(self.ui.existing_cbFilterFacetClasses.checkState())
 
         self.ui.existing_sizeLineEdit.setEnabled(False)
         self.ui.existing_parentLineEdit.setEnabled(False)
 
         self.ui.new_parentComboBox.clear()
-        self.ui.new_parentComboBox.addItems(self.objStuff.validParents)
+        self.ui.new_parentComboBox.addItems(self.objStuff.newValidParents)
 
         self.ui.new_nameLineEdit.setText(self.objStuff.defaultNewStructName)
 
@@ -89,6 +94,7 @@ class FacetUiWidget(QtGui.QWidget):
 
         self.ui.new_locationLineEdit.setText('0x%08x' % self.objStuff.currentAddress)
         self.ui.existing_locationLineEdit.setText('0x%08x' % self.objStuff.currentAddress)
+        self.ui.vfunc_locationLineEdit.setText('0x%08x' % self.objStuff.currentAddress)
 
         if self.objStuff.funcStart:
             self.ui.new_funcStartLineEdit.setText('0x%08x' % self.objStuff.funcStart)
@@ -104,7 +110,8 @@ class FacetUiWidget(QtGui.QWidget):
         self.ui.existing_cbAssociateFunction.setCheckState(QtCore.Qt.CheckState.Checked)
 
         self.loadVfuncValues()
-        self.ui.relations_nameComboBox.addItems(self.objStuff.userStructs)
+        self.ui.relations_nameComboBox.addItems(self.objStuff.userStructNames)
+        self.onRelationsNameActivated(0) 
 
         self.ui.help_textBrowser.setHtml(g_HelpHtml)
         #orange TODO: left off here
@@ -114,8 +121,50 @@ class FacetUiWidget(QtGui.QWidget):
         #self.ui.combo_existingClasses.clear()
         #self.ui.combo_existingClasses.addItems(self.objStuff.userStructs)
         #self.ui.line_className.setText(self.objStuff.defaultNewStructName)
+
     def loadVfuncValues(self):
-        self.logger.info('TODO: implement loadVfuncValues')
+        #self.logger.info('TODO: implement loadVfuncValues')
+        #self.ui.vfuncTreeWidget.setHeaderLabels("ID", "Struct", "member", "Address", "Function")
+        topLevelItems = []
+        labels = [item[0] for item in g_vfuncChooseCols]
+        self.ui.vfuncTreeWidget.setHeaderLabels(labels)
+        for i, (label, width) in enumerate(g_vfuncChooseCols):
+            self.ui.vfuncTreeWidget.setColumnWidth(i, width)
+
+        #first create all of the tree widgets
+        widgets = {}
+        for sid, structName, fieldName, address, addrName in self.objStuff.possibleVfuncs:
+            widg = QtGui.QTreeWidgetItem( ['0x%08x' % sid, structName, fieldName, address, addrName])
+            widgets[sid] = widg
+
+        #build the tree of items now
+        self.logger.debug('Starting vfunc treewidget creation')
+        for sid, widg in widgets.items():
+            if self.objStuff.classData['structs'].has_key(sid):
+                parentSid = self.objStuff.classData['structs'][sid]['parent']
+                if parentSid and widgets.has_key(parentSid):
+                    self.logger.debug('Found parent for struct %s: %s', widgets[sid].text(1), widgets[parentSid].text(1))
+                    widgets[parentSid].addChild(widg)
+                else:
+                    self.logger.debug('Found toplevel struct %s', widgets[sid].text(1))
+                    topLevelItems.append(widg)
+            elif self.objStuff.classData['vtables'].has_key(sid):
+                parentSid = self.objStuff.classData['vtables'][sid]['parent']
+                if parentSid and widgets.has_key(parentSid):
+                    self.logger.debug('Found parent for vtable %s: %s', widgets[sid].text(1), widgets[parentSid].text(1))
+                    widgets[parentSid].addChild(widg)
+                else:
+                    self.logger.debug('Found toplevel vtable %s', widgets[sid].text(1))
+                    topLevelItems.append(widg)
+            else:
+                self.logger.info('User defined struct has possible vfunc? 0x%08x:%s', sid, widg.text(1))
+                topLevelItems.append(widg)
+        #add top level items
+        self.ui.vfuncTreeWidget.insertTopLevelItems(0, topLevelItems)
+        #expand all items now
+        for sid, widg in widgets.items():
+            widg.setExpanded(True)
+        self.logger.debug('Completed vfunc treewidget creation')
 
     def onAccepted(self):
         try:
@@ -135,8 +184,115 @@ class FacetUiWidget(QtGui.QWidget):
     def onFilterFacetStructsChanged(self, state):
         if state == QtCore.Qt.CheckState.Checked:
             self.logger.debug('Hide non-FACET structs changed: checked')
+            self.ui.existing_nameComboBox.clear()
+            self.ui.existing_nameComboBox.addItems(self.objStuff.userStructNames)
         else:
             self.logger.debug('Hide non-FACET structs changed: not checked')
+            self.ui.existing_nameComboBox.clear()
+            self.ui.existing_nameComboBox.addItems(self.objStuff.existingStructNames)
+
+    def onRelationsChangeParentClicked(self):
+        try:
+            clsname = str(self.ui.relations_nameComboBox.itemText(idx))
+            parentname = str(self.ui.relations_parentComboBox.itemText(idx))
+            sid = self.objStuff.structNameToSid.get(clsname)
+            psid = self.objStuff.structNameToSid.get(parentname)
+            descendents = self.objStuff.getAllDescendents(sid)
+            if psid in descendents:
+                raise RuntimeError('parent is descendents! should not happen')
+
+            oldParentSid = self.classData['structs'][sid]['parent']
+            if psid == oldParentSid:
+                self.logger.debug('Change parent clicked, but old parent == new parent')
+                return
+            cls = self.classData['structs'][sid]
+            cls['parent'] = psid
+
+            oldParent = self.classData['structs'][oldParentSid]
+            oldParent['children'].remove(sid)
+
+            newParent = self.classData['structs'][psid]
+            newChildren = set(newParent['children'])
+            newChildren.add(sid)
+            newParent['children'] = list(newChildren)
+
+            self.storeDataToIdb()
+        except Exception, err:
+            self.logger.exception('onRelationsChangeParentClicked error: %s', str(err))
+
+    def onRelationsNameActivated(self, idx):
+        try:
+            self.logger.debug('onRelationsNameActivated: %r', idx)
+            clsname = str(self.ui.relations_nameComboBox.itemText(idx))
+            if len(clsname) == 0:
+                return
+            sid = self.objStuff.structNameToSid.get(clsname)
+            if sid is None:
+                raise RuntimeError('Could not map clsname %s to sid' % clsname)
+            self.logger.debug('New relations class: 0x%08x:%s', sid, clsname)
+            descendents = self.objStuff.getAllDescendents(sid)
+            
+            #orange TODO: use filter checkbox
+            #set the possible parent classes for this class
+            possibleParents = set(self.objStuff.existingStructNames)
+            possibleParents.difference(set(descendents))
+            possibleParents = list(possibleParents)
+            possibleParents.sort()
+            #insert an empty initial value for no parent
+            possibleParents.insert(0, '')
+            currIdx = 0
+            currParentSid = self.objStuff.classData['structs'][sid]['parent']
+            if currParentSid:
+                try:
+                    currIdx = possibleParents.index(currParentSid)
+                except ValueError, err:
+                    self.logger.exception('Could not find parent in possibleParents list! %s', str(err))
+            self.ui.relations_parentComboBox.clear()
+            self.ui.relations_parentComboBox.addItems(possibleParents)
+            self.ui.relations_parentComboBox.setCurrentIndex(currIdx)
+
+            ######################################## 
+            labels = [item[0] for item in g_relationsChildrenCols]
+            self.ui.relations_containsTableWidget.setHorizontalHeaderLabels(labels)
+            for i, (label, width) in enumerate(g_relationsChildrenCols):
+                self.ui.relations_containsTableWidget.setColumnWidth(i, width)
+
+            ######################################## 
+            labels = [item[0] for item in g_relationsChildrenCols]
+            self.ui.relations_childClassesTreeWidget.setHeaderLabels(labels)
+            for i, (label, width) in enumerate(g_relationsChildrenCols):
+                self.ui.relations_childClassesTreeWidget.setColumnWidth(i, width)
+
+            #first create all of the descendent tree widgets
+            widgets = {}
+            for dsid in descendents:
+                descname = self.objStuff.classData['structs'][dsid]['name']
+                widg = QtGui.QTreeWidgetItem( ['0x%08x' % dsid, descname])
+                widgets[dsid] = widg
+
+            #build the tree of items now
+            topLevelItems =[]
+            self.logger.debug('Starting descendents treewidget creation')
+            for dsid, widg in widgets.items():
+                if self.objStuff.classData['structs'].has_key(dsid):
+                    parentSid = self.objStuff.classData['structs'][dsid]['parent']
+                    if parentSid and widgets.has_key(parentSid):
+                        self.logger.debug('Found parent for struct %s: %s', widgets[dsid].text(1), widgets[parentSid].text(1))
+                        widgets[parentSid].addChild(widg)
+                    else:
+                        self.logger.debug('Found toplevel struct %s', widgets[dsid].text(1))
+                        topLevelItems.append(widg)
+                else:
+                    self.logger.info('User defined struct has possible descendent? 0x%08x:%s', dsid, widg.text(1))
+                    topLevelItems.append(widg)
+            #add top level items
+            self.ui.relations_childClassesTreeWidget.insertTopLevelItems(0, topLevelItems)
+            #expand all items now
+            for dsid, widg in widgets.items():
+                widg.setExpanded(True)
+            self.logger.debug('Completed descendents treewidget creation')
+        except Exception, err:
+            self.logger.exception('onRelationsNameActivated error: %s', str(err))
 
     #def setDefaultFieldValues(self):
     #    '''Used to init display field'''
@@ -173,15 +329,23 @@ class FacetUiWidget(QtGui.QWidget):
                 try:
                     self.objStuff.structSize = int(self.ui.new_sizeLineEdit.text(), 0)
                 except:
+                    self.logger.info('Error converting parentOffset to integer: %s', str(err))
                     self.objStuff.structSize = 0
             else:
                 self.objStuff.structSize = 0
             ########################################
-            if len(self.objStuff.validParents) > 0 :
+            if (self.ui.new_parentOffsetLineEdit.text() is not None) and (len(self.ui.new_parentOffsetLineEdit.text()) > 0):
+                try:
+                    self.objStuff.parentOffset = int(self.ui.new_parentOffsetLineEdit.text(), 0)
+                except:
+                    self.logger.info('Error converting parentOffset to integer: %s', str(err))
+            ########################################
+            if len(self.objStuff.newValidParents) > 0 :
                 parentIdx = self.ui.new_parentComboBox.currentIndex()
-                parentName = self.objStuff.validParents[parentIdx]
+                parentName = self.objStuff.newValidParents[parentIdx]
+                self.logger.debug('idaui setting newStructParentName: %d:%s', parentIdx, parentName)
                 if len(parentName) != 0:
-                    self.newStructParentName = parentName
+                    self.objStuff.newStructParentName = parentName
             ########################################
             self.objStuff.selectedReg = str(self.ui.new_pointerComboBox.currentText())
             ########################################
@@ -204,7 +368,10 @@ class FacetUiWidget(QtGui.QWidget):
             ################################################################################
         elif actionName == 'existing':
             nameidx = self.ui.existing_nameComboBox.currentIndex()
-            self.objStuff.existingStructName = self.objStuff.existingStructNames[nameidx]
+            if self.ui.existing_cbFilterFacetClasses.checkState() == QtCore.Qt.CheckState.Checked:
+                self.objStuff.existingStructName = self.objStuff.userStructNames[nameidx]
+            else:
+                self.objStuff.existingStructName = self.objStuff.existingStructNames[nameidx]
             ########################################
             self.objStuff.selectedReg = str(self.ui.existing_pointerComboBox.currentText())
             ########################################
@@ -231,6 +398,13 @@ class FacetUiWidget(QtGui.QWidget):
             ################################################################################
         elif actionName == 'vfunc':
             self.logger.info('action vfunc: TODO')
+            selected = [[ item.text(col) for col in range(item.columnCount())] for item in self.ui.vfuncTreeWidget.selectedItems()]
+            for item in selected:
+                item[0] = int(item[0], 0)
+                item[3] = int(item[3], 0)
+            #return data
+            self.objStuff.selectedVfuncs = selected 
+
             ################################################################################
         elif actionName == 'relations':
             self.logger.info('action relations: TODO')

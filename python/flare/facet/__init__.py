@@ -87,6 +87,30 @@ class Launcher(object):
         except Exception, err:
             self.logger.exception('Error in runDialog: %s', str(err))
 
+    def runAction(self, action):
+        try:
+            objStuff = analysis.FacetObjectAnalyzer(None)
+
+            if action == 'dumpjson':
+                savefile = idc.AskFile(True, '*.json', 'Enter file to save FACET json data')
+                if (savefile is None):
+                    self.logger.info('User did not specify a file to save FACET data to')
+                    return
+                objStuff.dumpJsonFile = savefile
+            elif action == 'loadjson':
+                savefile = idc.AskFile(False, '*.json', 'Enter file to load FACET json data')
+                if (savefile is None):
+                    self.logger.info('User did not specify a file to load FACET data from')
+                    return
+                objStuff.loadJsonFile = savefile
+            else:
+                raise RuntimeError('Bad action %s' % action)
+
+            objStuff.action = action
+            objStuff.runAnalysis()
+        except Exception, err:
+            self.logger.exception('Error in runAction: %s', str(err))
+
     def runForm(self):
         raise RuntimeError('runForm not supported')
         #try:
@@ -117,6 +141,14 @@ def runBrowseClasses():
 def runBrowseHelp():
     launcher =  Launcher()
     launcher.runDialog('help')
+
+def runDumpDataToJson():
+    launcher =  Launcher()
+    launcher.runAction('dumpjson')
+
+def runLoadDataFromJson():
+    launcher =  Launcher()
+    launcher.runAction('loadjson')
 
 #if __name__ == '__main__':
 #    logger = jayutils.configLogger('', logging.DEBUG)

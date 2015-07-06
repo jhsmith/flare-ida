@@ -125,6 +125,42 @@ class FacetAction_BrowseHelp(idaapi.action_handler_t):
             return idaapi.AST_ENABLE_FOR_FORM 
         return idaapi.AST_DISABLE_FOR_FORM
 
+class FacetAction_DumpDataToJson(idaapi.action_handler_t):
+    def __init__(self):
+        idaapi.action_handler_t.__init__(self)
+        self.logger = flare.jayutils.getLogger('facet.FacetAction_DumpDataToJson')
+
+    def activate(self, ctx):
+        try:
+            self.logger.debug("Hello from FacetAction_DumpDataToJson")
+            flare.facet.runDumpDataToJson()
+        except Exception, err:
+            self.logger.exception('Error in activate: %s', str(err))
+        return 1
+
+    def update(self, ctx):
+        if ctx.form_type == idaapi.BWN_DISASM:
+            return idaapi.AST_ENABLE_FOR_FORM 
+        return idaapi.AST_DISABLE_FOR_FORM
+
+class FacetAction_LoadDataFromJson(idaapi.action_handler_t):
+    def __init__(self):
+        idaapi.action_handler_t.__init__(self)
+        self.logger = flare.jayutils.getLogger('facet.FacetAction_LoadDataFromJson')
+
+    def activate(self, ctx):
+        try:
+            self.logger.debug("Hello from FacetAction_LoadDataFromJson")
+            flare.facet.runLoadDataFromJson()
+        except Exception, err:
+            self.logger.exception('Error in activate: %s', str(err))
+        return 1
+
+    def update(self, ctx):
+        if ctx.form_type == idaapi.BWN_DISASM:
+            return idaapi.AST_ENABLE_FOR_FORM 
+        return idaapi.AST_DISABLE_FOR_FORM
+
 
 ########################################
 #the hook object needs to be global apparently - i guess ida wasn't keeping a ref to it
@@ -165,8 +201,7 @@ def initActions():
         'facet:runBrowseClassHierarchy',
         'Browse Classes',
         FacetAction_BrowseClassHierarchy(),
-        #'Alt-8',
-        '',
+        'Alt-7',
         'Browse FACET annotated classes',
         199)
     idaapi.register_action(newaction)
@@ -179,6 +214,26 @@ def initActions():
         'View FACET Help Information',
         199)
     idaapi.register_action(newaction)
+    ########################################
+    newaction = idaapi.action_desc_t(
+        'facet:runDumpDataToJson',
+        'Dump data',
+        FacetAction_DumpDataToJson(),
+        '',
+        'Dump data to json',
+        199)
+    idaapi.register_action(newaction)
+
+    ########################################
+    newaction = idaapi.action_desc_t(
+        'facet:runLoadDataFromJson',
+        'Load data',
+        FacetAction_LoadDataFromJson(),
+        '',
+        'Load data from json file, overwriting IDB user classes info',
+        199)
+    idaapi.register_action(newaction)
+
     ########################################
     idaapi.attach_action_to_menu(
         'Edit/FACET/',
@@ -205,22 +260,32 @@ def initActions():
         'facet:runBrowseHelp',
         idaapi.SETMENU_APP
     )
+    idaapi.attach_action_to_menu(
+        'Edit/FACET/Data',
+        'facet:runDumpDataToJson',
+        idaapi.SETMENU_APP
+    )
+    idaapi.attach_action_to_menu(
+        'Edit/FACET/Data',
+        'facet:runLoadDataFromJson',
+        idaapi.SETMENU_APP
+    )
+
     ########################################
     class FacetUIHook(idaapi.UI_Hooks):
         def populating_tform_popup(self, form, popup):
             # You can attach here.
+            #idaapi.msg("FacetUIHook: populating\n")
             pass
-            print 'FacetUIHook: populating'
-            idaapi.msg("FacetUIHook: populating\n")
 
         def finish_populating_tform_popup(self, form, popup):
             if idaapi.get_tform_type(form) == idaapi.BWN_DISASM:
-                print 'Found FacetUIHook for BWN_DISASM'
+                #print 'Found FacetUIHook for BWN_DISASM'
                 idaapi.attach_action_to_popup(form, popup, 'facet:runCreateStruct', 'FACET/')
                 idaapi.attach_action_to_popup(form, popup, 'facet:runMarkupExisting', 'FACET/')
                 idaapi.attach_action_to_popup(form, popup, 'facet:runMarkupVtable', 'FACET/')
-            else:
-                print 'Skipping FacetUIHook: %d' % idaapi.get_tform_type(form)
+            #else:
+            #    print 'Skipping FacetUIHook: %d' % idaapi.get_tform_type(form)
     ########################################
 
     g_Hooks = FacetUIHook()
