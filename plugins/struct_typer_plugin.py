@@ -42,7 +42,7 @@ class struct_typer_plugin_t(idaapi.plugin_t):
         return idaapi.PLUGIN_OK
 
     def run(self, arg):
-        idaapi.msg("StructTyper run() called with %d!\n" % arg)
+        #idaapi.msg("StructTyper run() called with %d!\n" % arg)
         idaapi.require('flare')
         idaapi.require('flare.struct_typer')
         flare.struct_typer.main()
