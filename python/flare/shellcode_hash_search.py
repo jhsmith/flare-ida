@@ -469,8 +469,8 @@ class SearchLauncher(object):
 ###################################################################
 
 def main():
-    #logger = jayutils.configLogger('', logging.DEBUG)
-    logger = jayutils.configLogger('', logging.INFO)
+    #logger = jayutils.configLogger(__name__, logging.DEBUG)
+    logger = jayutils.configLogger(__name__, logging.INFO)
     launcher = SearchLauncher()
     launcher.run()
 

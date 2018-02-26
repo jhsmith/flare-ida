@@ -223,8 +223,11 @@ class StructTypeRunner(object):
                         raise RuntimeError('Failed to get sid for stack frame at 0x%x' % ea) 
                     if (struc is None) or (struc == 0) or (struc == idc.BADADDR):
                         raise RuntimeError('Failed to get struc_t for stack frame at 0x%x' % ea)
-                    #need the actual pointer value, not the swig wrapped struc_t
-                    struc= long(struc.this)
+                    if using_ida7api:
+                        pass
+                    else:
+                        #need the actual pointer value, not the swig wrapped struc_t
+                        struc= long(struc.this)
                 else:
                     structName = dlg.getActiveStruct()
                     if structName is None:
@@ -293,19 +296,17 @@ class StructTypeRunner(object):
                 continue
             code, type_str, fields_str, cmt, field_cmts, sclass, value  = tup
             foundFunctions += 1
-            if ord(type_str[0]) != idaapi.BT_FUNC:
-                #not positive that the first type value has to be BT_FUNC or not...
-                # and whether it's important to only apply to funcs or not
+            tif = idaapi.tinfo_t()
+            tif.deserialize(None, type_str, fields_str, cmt)
+            if not tif.is_func():
                 logger.debug('Found named type, but not a function: %s', funcname)
                 continue
-            tif = idaapi.tinfo_t()
-            type_str_ptr = chr(idaapi.BT_PTR) + type_str
-            tif.deserialize(None, type_str_ptr, fields_str, cmt)
+            tif.create_ptr(tif)
             ret = idaapi.set_member_tinfo(struc, memb, off, tif, 0)
             if ret != idaapi.SMT_OK:
                 logger.info("Got set_member_tinfo ret code: %d" % ret)
             else:
-                logger.info('set_member_tinfo: %s', idaapi.idc_print_type(type_str_ptr, fields_str, funcname, 0))
+                logger.info('set_member_tinfo: %s', tif.dstr())
 
     def processStruct(self, regPrefix, struc, sid):
         '''
@@ -378,8 +379,8 @@ class StructTypeRunner(object):
 
 def main():
     global logger
-    #logger = jayutils.configLogger('', logging.DEBUG)
-    logger = jayutils.configLogger('', logging.INFO)
+    #logger = jayutils.configLogger(__name__, logging.DEBUG)
+    logger = jayutils.configLogger(__name__, logging.INFO)
     launcher = StructTypeRunner()
     launcher.run()
 

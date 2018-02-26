@@ -38,7 +38,7 @@ class struct_typer_plugin_t(idaapi.plugin_t):
     wanted_hotkey = ""
 
     def init(self):
-        idaapi.msg("StructTyper init() called!\n")
+        #idaapi.msg("StructTyper init() called!\n")
         return idaapi.PLUGIN_OK
 
     def run(self, arg):
